@@ -238,6 +238,7 @@ const ele = (
   </div>
 );
 
+/** @jsx lireact.createElement */
 const Fun = function (props) {
   return (
     <div>
