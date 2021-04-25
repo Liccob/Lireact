@@ -51,16 +51,56 @@ function createDom(element) {
     element.type === "TEXT_ELEMENT"
       ? document.createTextNode("")
       : document.createElement(element.type);
-
-  const isProperty = (key) => key !== "children";
-  Object.keys(element.props)
-    .filter(isProperty)
-    .forEach((name) => {
-      dom[name] = element.props[name];
-    });
+  updateDom(dom, {}, element.props || {});
   return dom;
 }
 
+const isEvent = (key) => key.startsWith("on");
+const isProperty = (key) => key !== "children" && !isEvent(key);
+const isNew = (prev, next) => (key) => prev[key] !== next[key];
+const isGone = (prev, next) => (key) => !(key in next);
+function updateDom(dom, prevProps, newProps) {
+  // 删除旧的事件监听
+  Object.keys(prevProps)
+    .filter(isEvent)
+    .filter((key) => !(key in newProps) || isNew(prevProps, newProps)(key))
+    .forEach((name) => {
+      const eventType = name.toLowerCase().substring(2);
+      dom.removeEventListener(eventType, prevProps[name]);
+    });
+
+  // 删除旧props
+  Object.keys(prevProps)
+    .filter(isProperty)
+    .filter(isGone(prevProps, newProps))
+    .forEach((name) => {
+      dom[name] = "";
+    });
+
+  // 更新props
+  Object.keys(newProps)
+    .filter(isProperty)
+    .forEach((name) => {
+      dom[name] = newProps[name];
+    });
+
+  // 添加事件
+  Object.keys(newProps)
+    .filter(isEvent)
+    .filter(isNew(prevProps, newProps))
+    .forEach((name) => {
+      const eventType = name.toLowerCase().substring(2);
+      dom.addEventListener(eventType, newProps[name]);
+    });
+}
+
+function commitDeletion(fiber, domParent) {
+  if (fiber.dom) {
+    domParent.removeChild(fiber.dom);
+  } else {
+    commitDeletion(fiber.child, domParent);
+  }
+}
 function workLoop(deadline) {
   let shouldYield = false;
   while (nextUnitOfWork && !shouldYield) {
@@ -77,24 +117,44 @@ function workLoop(deadline) {
 requestIdleCallback(workLoop);
 
 function commitRoot() {
+  deletions.forEach(commitWork);
   commitWork(wipRoot.child);
   currentRoot = wipRoot;
   wipRoot = null;
 }
 
 function commitWork(fiber) {
-  deletions.forEach(commitWork);
-
   if (!fiber) return;
 
-  const domParent = fiber.parent.dom;
-  domParent.appendChild(fiber.dom);
+  let domParentFiber = fiber.parent;
+
+  while (!domParentFiber.dom) {
+    domParentFiber = domParentFiber.parent;
+  }
+  console.log(domParentFiber, "domParentFiber");
+  const domParent = domParentFiber.dom;
+
+  if (fiber.effectTag === "PLACEMENT" && fiber.dom != null) {
+    domParent.appendChild(fiber.dom);
+  } else if (fiber.effectTag === "UPDATE" && fiber.dom != null) {
+    updateDom(fiber.dom, fiber.alternate.props, fiber.props);
+  } else if (fiber.effectTag === "DELETION") {
+    commitDeletion(fiber, domParent);
+  }
+
   commitWork(fiber.child);
   commitWork(fiber.sibling);
 }
 
 function performUnitOfWork(fiber) {
-  updateHostComponent(fiber);
+  console.log(fiber);
+  const isFunctionComponent = fiber.type instanceof Function;
+
+  if (isFunctionComponent) {
+    updateFunctionComponent(fiber);
+  } else {
+    updateHostComponent(fiber);
+  }
 
   if (fiber.child) {
     return fiber.child;
@@ -105,6 +165,13 @@ function performUnitOfWork(fiber) {
     if (nextFiber.sibling) return nextFiber.sibling;
     nextFiber = nextFiber.parent;
   }
+}
+
+function updateFunctionComponent(fiber) {
+  console.log(fiber, "this is a function compnent");
+  const children = [fiber.type(fiber.props)];
+  console.log(children, "function children");
+  reconcileChildren(fiber, children);
 }
 
 function updateHostComponent(fiber) {
@@ -171,5 +238,14 @@ const ele = (
   </div>
 );
 
+const Fun = function (props) {
+  return (
+    <div>
+      <div>test</div>
+      <div>test</div>
+    </div>
+  );
+};
+
 const container = document.getElementById("app");
-lireact.render(ele, container);
+lireact.render(<Fun />, container);
