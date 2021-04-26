@@ -33,6 +33,8 @@ let nextUnitOfWork = null;
 let wipRoot = null;
 let currentRoot = null;
 let deletions = [];
+let wipFiber = null;
+let hookIndex = null;
 
 function render(element, container) {
   wipRoot = {
@@ -131,7 +133,6 @@ function commitWork(fiber) {
   while (!domParentFiber.dom) {
     domParentFiber = domParentFiber.parent;
   }
-  console.log(domParentFiber, "domParentFiber");
   const domParent = domParentFiber.dom;
 
   if (fiber.effectTag === "PLACEMENT" && fiber.dom != null) {
@@ -147,7 +148,6 @@ function commitWork(fiber) {
 }
 
 function performUnitOfWork(fiber) {
-  console.log(fiber);
   const isFunctionComponent = fiber.type instanceof Function;
 
   if (isFunctionComponent) {
@@ -168,9 +168,10 @@ function performUnitOfWork(fiber) {
 }
 
 function updateFunctionComponent(fiber) {
-  console.log(fiber, "this is a function compnent");
+  wipFiber = fiber;
+  wipFiber.hooks = [];
+  hookIndex = 0;
   const children = [fiber.type(fiber.props)];
-  console.log(children, "function children");
   reconcileChildren(fiber, children);
 }
 
@@ -215,6 +216,10 @@ function reconcileChildren(wipFiber, elements) {
       deletions.push(oldFiber);
     }
 
+    if (oldFiber) {
+      oldFiber = oldFiber.sibling;
+    }
+
     if (index === 0) {
       wipFiber.child = newFiber;
     } else {
@@ -224,10 +229,45 @@ function reconcileChildren(wipFiber, elements) {
   });
 }
 
+function useState(initState) {
+  const oldHook =
+    wipFiber.alternate &&
+    wipFiber.alternate.hooks &&
+    wipFiber.alternate.hooks[hookIndex];
+
+  let newHook = {
+    state: oldHook ? oldHook.state : initState,
+    queue: []
+  };
+  // 上次遗留的更新 这次一并就更新完了
+  const actions = oldHook ? oldHook.queue : [];
+  // 这里默认传入的action是函数
+  actions.forEach((action) => {
+    newHook.state = action(newHook.state);
+  });
+
+  const setState = function (action) {
+    newHook.queue.push(action);
+    // 模拟触发一次更新 如果更新那就是从头到位重新计算
+    wipRoot = {
+      dom: currentRoot.dom,
+      props: currentRoot.props,
+      alternate: currentRoot
+    };
+    nextUnitOfWork = wipRoot;
+    deletions = [];
+  };
+
+  wipFiber.hooks.push(newHook);
+  hookIndex++;
+  console.log(wipFiber, "wipFiber");
+  return [newHook.state, setState];
+}
 // 解析过jsx之后，就可以根据我们的渲染规则去渲染dom
 const lireact = {
   createElement,
-  render
+  render,
+  useState
 };
 
 /** @jsx lireact.createElement */
@@ -240,10 +280,18 @@ const ele = (
 
 /** @jsx lireact.createElement */
 const Fun = function (props) {
+  let [t, setT] = lireact.useState(0);
   return (
     <div>
       <div>test</div>
-      <div>test</div>
+      <div
+        onClick={() => {
+          setT((c) => c + 1);
+          console.log("click");
+        }}
+      >
+        {t}
+      </div>
     </div>
   );
 };
