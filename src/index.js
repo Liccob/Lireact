@@ -264,13 +264,13 @@ function useState(initState) {
   return [newHook.state, setState];
 }
 // 解析过jsx之后，就可以根据我们的渲染规则去渲染dom
-const lireact = {
+const testreact = {
   createElement,
   render,
   useState
 };
 
-/** @jsx lireact.createElement */
+/** @jsx testreact.createElement */
 const ele = (
   <div>
     <div>test</div>
@@ -278,9 +278,9 @@ const ele = (
   </div>
 );
 
-/** @jsx lireact.createElement */
+/** @jsx testreact.createElement */
 const Fun = function (props) {
-  let [t, setT] = lireact.useState(0);
+  let [t, setT] = testreact.useState(0);
   return (
     <div>
       <div>test</div>
@@ -297,4 +297,4 @@ const Fun = function (props) {
 };
 
 const container = document.getElementById("app");
-lireact.render(<Fun />, container);
+testreact.render(<Fun />, container);
